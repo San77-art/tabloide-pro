@@ -1,25 +1,73 @@
 {
   "expo": {
-    "name": "tabloide-pro",
-    "slug": "tabloide-pro",
+    "name": "Tab",
+    "slug": "tab-ofertas",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+    "scheme": "tab",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1D4ED8"
+    },
+    "updates": {
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/e746bd20-140d-4e8b-887f-758ed55927e2"
+    },
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "com.tab.ofertas",
+      "buildNumber": "1"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1D4ED8"
       },
-      "predictiveBackGestureEnabled": false
+      "package": "com.tab.ofertas",
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.INTERNET",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-web-browser",
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Tab precisa acessar suas fotos para adicionar logo do mercado.",
+          "cameraPermission": "Tab precisa da câmera para tirar foto do logo."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#2563EB"
+        }
+      ],
+      "@react-native-community/datetimepicker"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "e746bd20-140d-4e8b-887f-758ed55927e2"
+      },
+      "router": {}
     }
   }
 }

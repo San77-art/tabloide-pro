@@ -1,0 +1,50 @@
+{
+  "cli": {
+    "version": ">= 16.0.1",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "distribution": "internal"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "distribution": "internal"
+      },
+      "channel": "preview"
+    },
+    "production": {
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "ios": {
+        "distribution": "store"
+      },
+      "channel": "production"
+    }
+  },
+  "submit": {
+    "production": {
+      "android": {
+        "serviceAccountKeyPath": "./google-service-account.json",
+        "track": "internal"
+      },
+      "ios": {
+        "appleId": "SEU_APPLE_ID",
+        "ascAppId": "SEU_APP_ID",
+        "appleTeamId": "SEU_TEAM_ID"
+      }
+    }
+  }
+}
