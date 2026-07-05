@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
+const cron = require('node-cron');
 const { PLAN_DEFINITIONS, PLAN_LIMITS, mpRequest, ensurePreapprovalPlanId } = require('./mercadopago');
 
 // Credenciais do Firebase Admin: em produção (Railway) cole o JSON da service account
@@ -63,6 +64,76 @@ async function requireAuth(req, res, next) {
 
 app.get('/', (_req, res) => {
   res.json({ ok: true, service: 'tab-backend' });
+});
+
+// Monitoramento da cotação do dólar (mesma lógica de functions/index.js, migrada para
+// rodar aqui via node-cron em vez de Cloud Functions agendadas, que exigem o plano Blaze).
+const AWESOME_API_URL = 'https://economia.awesomeapi.com.br/json/last/USD-BRL,USD-PYG';
+const RATE_FIELD = { BRL: 'USDBRL', PYG: 'USDPYG' };
+
+const exchangeJobStatus = { lastRunAt: null, usersChecked: 0 };
+
+async function sendExchangeRateAlert(uid, changePercent, currency) {
+  const tokenDoc = await db.collection('push_tokens').doc(uid).get();
+  const token = tokenDoc.exists ? tokenDoc.data().token : null;
+  if (!token) return;
+
+  const direction = changePercent > 0 ? 'subiu' : 'desceu';
+  await fetch('https://exp.host/--/api/v2/push/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({
+      to: token,
+      sound: 'default',
+      title: '💵 Cotação do dólar mudou!',
+      body: `Dólar ${direction} ${Math.abs(changePercent).toFixed(1)}%! Toque para reajustar seus preços.`,
+      data: { screen: 'exchange' },
+    }),
+  });
+}
+
+async function checkExchangeRates() {
+  const res = await fetch(AWESOME_API_URL);
+  if (!res.ok) throw new Error(`AwesomeAPI respondeu ${res.status}`);
+  const rates = await res.json();
+
+  const configsSnap = await db.collection('exchange_rates').where('autoAdjustEnabled', '==', true).get();
+
+  await Promise.all(configsSnap.docs.map(async (docSnap) => {
+    const config = docSnap.data();
+    const uid = docSnap.id;
+    const currency = config.baseCurrency === 'PYG' ? 'PYG' : 'BRL';
+    const currentRate = parseFloat(rates[RATE_FIELD[currency]]?.bid);
+    if (!Number.isFinite(currentRate)) return;
+
+    const previousRate = config.lastKnownRate || currentRate;
+    const changePercent = previousRate > 0 ? ((currentRate - previousRate) / previousRate) * 100 : 0;
+    const threshold = config.alertThreshold ?? 2;
+
+    if (previousRate > 0 && Math.abs(changePercent) >= threshold) {
+      await sendExchangeRateAlert(uid, changePercent, currency);
+    }
+
+    await docSnap.ref.set(
+      { lastKnownRate: currentRate, lastCheckedAt: admin.firestore.FieldValue.serverTimestamp() },
+      { merge: true },
+    );
+  }));
+
+  exchangeJobStatus.lastRunAt = new Date();
+  exchangeJobStatus.usersChecked = configsSnap.size;
+}
+
+cron.schedule('*/15 * * * *', () => {
+  checkExchangeRates().catch((err) => console.error('Erro no monitoramento de cotação:', err));
+});
+
+app.get('/health', (_req, res) => {
+  res.json({
+    status: 'ok',
+    lastExchangeCheckAt: exchangeJobStatus.lastRunAt ? exchangeJobStatus.lastRunAt.toISOString() : null,
+    usersChecked: exchangeJobStatus.usersChecked,
+  });
 });
 
 // Cria uma assinatura (preapproval) no Mercado Pago para o plano escolhido e retorna
