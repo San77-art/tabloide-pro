@@ -2,14 +2,34 @@ import { useState, useEffect } from 'react';
 import { doc, onSnapshot, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import { uploadImageToCloudinary } from '../lib/cloudinary';
+import { AppCurrency } from '../types';
+
+export type MarketSegment =
+  | 'Supermercado' | 'Perfumaria' | 'Eletrônicos' | 'Roupas' | 'Calçados'
+  | 'Importados' | 'Farmácia' | 'Papelaria' | 'Brinquedos' | 'Outro';
+
+export type MarketCountry = 'Brasil' | 'Paraguai' | 'Outro';
 
 export interface Market {
   uid: string;
   name: string;
+  segment?: MarketSegment;
+  currency?: AppCurrency;
+  city?: string;
+  country?: MarketCountry;
   logoUrl?: string;
   plan: 'free' | 'pro';
   colors: { primary: string; secondary: string };
   createdAt?: unknown;
+}
+
+export interface CreateMarketInput {
+  name: string;
+  segment: MarketSegment;
+  currency: AppCurrency;
+  city: string;
+  country: MarketCountry;
+  logoUri?: string | null;
 }
 
 export function useMarket() {
@@ -27,11 +47,21 @@ export function useMarket() {
     return unsub;
   }, [auth.currentUser?.uid]);
 
-  const createMarket = async (name: string) => {
+  const createMarket = async (input: CreateMarketInput) => {
     const uid = auth.currentUser?.uid;
     if (!uid) throw new Error('Não autenticado');
+
+    const logoUrl = input.logoUri
+      ? await uploadImageToCloudinary(input.logoUri, `logos/${uid}`)
+      : undefined;
+
     await setDoc(doc(db, 'markets', uid), {
-      name,
+      name: input.name,
+      segment: input.segment,
+      currency: input.currency,
+      city: input.city,
+      country: input.country,
+      ...(logoUrl ? { logoUrl } : {}),
       plan: 'free',
       colors: { primary: '#2563EB', secondary: '#7C3AED' },
       createdAt: serverTimestamp(),
