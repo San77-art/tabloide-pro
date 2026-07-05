@@ -1,4 +1,5 @@
 const fs = require('fs');
+const crypto = require('crypto');
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
@@ -117,13 +118,49 @@ app.get('/subscription-status/:id', requireAuth, async (req, res) => {
   }
 });
 
+// Valida o header x-signature enviado pelo Mercado Pago, conforme
+// https://www.mercadopago.com.br/developers/pt/docs/checkout-pro/additional-content/notifications/webhooks#Assinatura-do-webhook
+// Isso garante que a notificação realmente veio do MP, e não de um terceiro forjando o payload.
+function isValidMpSignature(req, resourceId) {
+  const secret = process.env.MP_WEBHOOK_SECRET;
+  if (!secret) {
+    console.error('MP_WEBHOOK_SECRET não configurada — recusando notificação do webhook.');
+    return false;
+  }
+
+  const signatureHeader = req.headers['x-signature'];
+  const requestId = req.headers['x-request-id'];
+  if (!signatureHeader || !requestId || !resourceId) return false;
+
+  const parts = Object.fromEntries(
+    String(signatureHeader)
+      .split(',')
+      .map((part) => part.split('=').map((s) => s.trim()))
+      .filter(([key, value]) => key && value),
+  );
+  const { ts, v1: receivedHash } = parts;
+  if (!ts || !receivedHash) return false;
+
+  const manifest = `id:${String(resourceId).toLowerCase()};request-id:${requestId};ts:${ts};`;
+  const expectedHash = crypto.createHmac('sha256', secret).update(manifest).digest('hex');
+
+  const expectedBuf = Buffer.from(expectedHash, 'hex');
+  const receivedBuf = Buffer.from(receivedHash, 'hex');
+  return expectedBuf.length === receivedBuf.length && crypto.timingSafeEqual(expectedBuf, receivedBuf);
+}
+
 // Recebe as notificações do Mercado Pago para assinaturas (preapproval).
 // Por segurança, nunca confiamos no status enviado no corpo da notificação: buscamos
 // o preapproval real na API do MP (usando o Access Token) antes de atualizar o Firestore.
 app.post('/webhook/mp', async (req, res) => {
   try {
-    const preapprovalId = req.body?.data?.id || req.body?.id || req.query.id;
+    const preapprovalId = req.body?.data?.id || req.body?.id || req.query.id || req.query['data.id'];
     const type = req.body?.type || req.query.topic;
+
+    if (!isValidMpSignature(req, preapprovalId)) {
+      res.sendStatus(401);
+      return;
+    }
 
     if (!preapprovalId || (type && type !== 'subscription_preapproval' && type !== 'preapproval')) {
       res.sendStatus(200);
